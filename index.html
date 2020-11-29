@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Guerra Naval</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.3/socket.io.js" integrity="sha512-Jr0UIR/Q8MUX+93zjDOhuDUKLqJZObtwpkLJQcR9qMaLgL0thet39IORuavUaZFkZ8a4ktrUsKPM9mf5LWMduA==" crossorigin="anonymous"></script>    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    <h1>Guerra Naval</h1>
+    <button onclick="getRoom()">Get Room</button>
+    <button onclick="sendTablero()">Enviar tablero</button>
+    <h1>Mi tablero</h1>
+    <table id="my_tablero" style="width:100px;display: inline-block;"></table>
+    <h1>Enemigo</h1>
+    <table id="enemy_tablero" style="width:100px;float: left;"></table>
+</body>
+<script>
+    let prometedores = [];
+    const getRandomItem = (set) => {
+        while(prometedores.length > 0){
+            const coordiantePrometedora = prometedores.pop();
+            if(set.has(coordiantePrometedora)){
+                set.delete(coordiantePrometedora);
+                const coor = {
+                    y: Number(coordiantePrometedora.split('-')[0]),
+                    x: Number(coordiantePrometedora.split('-')[1])
+                }
+                return coor;
+            }
+        }
+        const items = Array.from(set);
+        const item = items[Math.floor(Math.random() * items.length)];
+        set.delete(item);
+        const coor = {
+            y: Number(item.split('-')[0]),
+            x: Number(item.split('-')[1])
+        }
+        return coor;
+    }
+    const renderTablero = (matriz, id) => {
+        let miTablero = `
+        <tr>
+            <th></th>
+            <th>1</th>
+            <th>2</th>
+            <th>3</th>
+            <th>4</th>
+            <th>5</th>
+            <th>6</th>
+            <th>7</th>
+            <th>8</th>
+            <th>9</th>
+            <th>10</th>
+        </tr>`;
+        for (let i = 0; i < 10; i++) {
+            miTablero+= `\n<tr>\n<td>${i+1}</td>\n`;
+            for (let j = 0; j < 10; j++) {
+                miTablero+= `<td>${matriz[i][j]}</td>\n`;
+            }
+            miTablero+= `\n</tr>`;
+        }
+        document.getElementById(id).innerHTML = miTablero;
+    }
+    const tablero = {
+        portaaviones: {
+            yi: 0,
+            yf: 0,
+            xi: 0,
+            xf: 4
+        },
+        acorazado: {
+            yi: 3,
+            yf: 6,
+            xi: 0,
+            xf: 0
+        },
+        submarino: {
+            yi: 4,
+            yf: 4,
+            xi: 5,
+            xf: 7
+        },
+        patrullero: {
+            yi: 7,
+            yf: 7,
+            xi: 8,
+            xf: 9
+        },
+        destructor: {
+            yi: 6,
+            yf: 8,
+            xi: 5,
+            xf: 5
+        },
+    }
+    let matriz = [];
+    const coordinatesToShoot = new Set();
+    for (let i = 0; i < 10; i++) {//llenar matriz de 
+        matriz.push([]);
+        for (let j = 0; j < 10; j++) {
+            matriz[i][j] = '🌊';
+            coordinatesToShoot.add(`${i}-${j}`);
+        }
+    }
+    Object.keys(tablero).forEach((key) => {//colocar barcos con '🚢'
+        const { yi, yf, xi, xf } = tablero[key];
+        for (let i = yi; i <= yf; i++) {
+            for (let j = xi; j <= xf; j++) {
+                matriz[i][j] = '🚢';
+            }
+        }
+    });
+    
+    let matrizEnemigo = [];
+    for (let i = 0; i < 10; i++) {//llenar matriz de 
+        matrizEnemigo.push([]);
+        for (let j = 0; j < 10; j++) {
+            matrizEnemigo[i][j] = '❓';
+        }
+    }
+    
+
+    renderTablero(matriz, 'my_tablero');
+    renderTablero(matrizEnemigo, 'enemy_tablero');
+    const BASE_URL = 'http://localhost:4000/';
+    axios.defaults.baseURL = BASE_URL;
+    let socket;
+    const delay = (delayInms) => {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                resolve(2);
+            }, delayInms);
+        });
+    }
+    const getRoom = () => {
+        axios.get('room').then((res) => {
+            console.log(res.data);
+            console.log(`${BASE_URL}${res.data.room}`);
+            socket = io.connect(`${BASE_URL}${res.data.room}`);
+            socket.on('start', async () => {//server pide tablero
+                console.log('dar tablero');
+                await delay(400);
+                socket.emit('start', tablero);//enviar tablero
+            });
+            socket.on('turno', async () => {//server avisa que es tu turno
+                await delay(400);
+                const disparo = getRandomItem(coordinatesToShoot);
+                console.log(disparo);
+                socket.emit('disparo', disparo);//enviar disparo
+            });
+            socket.on('exito', async ({ x, y}) => {//server avisa que disparo realizado fue exitoso
+                console.log(`exito en ${x}, ${y}`);
+                prometedores.push(`${y+1}-${x}`);
+                prometedores.push(`${y-1}-${x}`);
+                prometedores.push(`${y}-${x+1}`);
+                prometedores.push(`${y}-${x-1}`);
+                matrizEnemigo[y][x] = '💥';
+                renderTablero(matrizEnemigo, 'enemy_tablero');
+            });
+            socket.on('fracaso', async ({ x, y}) => {//server avisa que disparo realizado fue un fracaso
+                matrizEnemigo[y][x] = '💧';
+                renderTablero(matrizEnemigo, 'enemy_tablero');
+            });
+            socket.on('impacto', async ({ x, y}) => {//server avisa que se ha sufrido un impacto
+                matriz[y][x] = '💥';
+                renderTablero(matriz, 'my_tablero');
+            });
+            socket.on('salvado', async ({ x, y}) => {//server avisa que se has recibido un disparo sin daño
+                matriz[y][x] = '💧';
+                renderTablero(matriz, 'my_tablero');
+            });
+            socket.on('ganador', async ({ razon }) => {//server avisa que has ganado
+                console.log(`Ganaste! razon: ${razon}`);
+                if(razon === 'desconectado'){
+                    socket.disconnect();
+                }
+            });
+            socket.on('perdedor', async ({ razon }) => {//server avisa que has perdido
+                console.log(`Perdiste! razon: ${razon}`);
+            });
+        })
+    }
+    const sendTablero = () => {
+    }
+</script>
+</html>
