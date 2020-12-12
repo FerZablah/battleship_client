@@ -19,7 +19,6 @@
 <body>
     <h1>Guerra Naval</h1>
     <button onclick="getRoom()">Get Room</button>
-    <button onclick="sendTablero()">Enviar tablero</button>
     <h1>Mi tablero</h1>
     <table id="my_tablero" style="width:100px;display: inline-block;"></table>
     <h1>Enemigo</h1>
@@ -171,7 +170,7 @@
         renderTablero(matrizEnemigo, 'enemy_tablero');
     }
     
-    const BASE_URL = 'http://localhost:4000/';
+    const BASE_URL = 'http://localhost:4000';//'http://localhost:4000/'; //http://cd4bb1bfcbd8.ngrok.io';*/;
     axios.defaults.baseURL = BASE_URL;
     let socket;
     const delay = (delayInms) => {
@@ -183,7 +182,7 @@
     }
     const getRoom = () => {
         axios.get('room').then((res) => {
-            socket = io.connect(`${BASE_URL}${res.data.room}`);
+            socket = io.connect(`${BASE_URL}/${res.data.room}`);
             generarTablero();
             llenarMatriz();
             socket.on('start', async () => {//server pide tablero
@@ -192,12 +191,12 @@
                 alertify.success('Tablero enviado');
             });
             socket.on('turno', async () => {//server avisa que es tu turno
-                await delay(100);
                 const disparo = getRandomItem(coordinatesToShoot);
+                await delay(200);
                 socket.emit('disparo', disparo);//enviar disparo
             });
             socket.on('exito', async ({ x, y}) => {//server avisa que disparo realizado fue exitoso
-                alertify.success(`exito en ${x}, ${y}`);
+                alertify.success(`éxito en ${x}, ${y}`);
                 prometedores.push(`${y+1}-${x}`);
                 prometedores.push(`${y-1}-${x}`);
                 prometedores.push(`${y}-${x+1}`);
@@ -207,25 +206,25 @@
             });
             socket.on('fracaso', async ({ x, y}) => {//server avisa que disparo realizado fue un fracaso
                 matrizEnemigo[y][x] = '💧';
-                alertify.error(`fracaso en ${x}, ${y}`);
+                alertify.error(`fracaso en ${x+1}, ${y+1}`);
                 renderTablero(matrizEnemigo, 'enemy_tablero');
             });
             socket.on('impacto', async ({ x, y}) => {//server avisa que se ha sufrido un impacto
                 matriz[y][x] = '💥';
-                alertify.error(`impacto en ${x}, ${y}`);
+                alertify.error(`impacto en ${x+1}, ${y+1}`);
                 renderTablero(matriz, 'my_tablero');
             });
             socket.on('salvado', async ({ x, y}) => {//server avisa que se has recibido un disparo sin daño
                 matriz[y][x] = '💧';
-                alertify.success(`salvado en ${x}, ${y}`);
+                alertify.success(`salvado en ${x+1}, ${y+1}`);
                 renderTablero(matriz, 'my_tablero');
             });
             socket.on('ganador', async ({ razon }) => {//server avisa que has ganado
-                alertify.success(`Ganaste! razon: ${razon}`);
+                alertify.success(`Ganaste, razón: ${razon}`);
                 socket.disconnect();
             });
             socket.on('perdedor', async ({ razon }) => {//server avisa que has perdido
-                alertify.error(`Perdiste! razon: ${razon}`);
+                alertify.error(`Perdiste, razón: ${razon}`);
                 socket.disconnect();
             });
         })
